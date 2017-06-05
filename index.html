@@ -1,0 +1,836 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body onLoad="setup()">
+	<div class="menu">
+		<p>Save The Dudes</p>
+		<ul>
+			<li><a href="index.html">Play Game</a></li>
+			<li><a href="about.html">About</a></li>
+		</ul>
+	</div>
+	<div class="game">
+		<canvas id="canvas" width="800" height="600" style="border:5px groove"></canvas>
+		<canvas id="canvas2" width="800" height="600" style="border:5px groove"></canvas>
+		<script>
+		/**
+		 * The game uses two canvases, the first canvas handles background animation, while the second canvas handles objects
+		 * that interact the game (falling people, menu options etc.). This is why the mouse click event looks at the second context
+		 * (ctx2). The following section of code initialises the variables needed for the game/menu's to function. The first function
+		 * called is the setup() which is called when the HTML body loads.
+		 * 
+		 */
+		 //Tells the 'draw_mute' function whether the audio is muted or not
+		 var muted = 0;
+		 //X position of the mouse
+		 var pointer_x;
+		 //Y position of the mouse
+		 var pointer_y;
+		 
+		 //These variables indicate which game state is active, so because the first thing we want to appear is the menu, the menu
+		 //state equals 1. The inter represents the game interval.
+		 var menuactive = 1;
+		 var overactive = 0;
+		 var inter;
+
+		 //Two variables used to animate the sky, when the sky_x scrolls of the canvas the second variable takes it's place
+		 var sky_x = 0;
+		 var sky_x2 = 799;
+
+		 //X position of the firemen characters. Since the firemen cannot move up or down a Y position would be redundant
+		 var firemen_x = 0;
+
+		 //Tells the 'draw_firemen' function if a falling person has just been bounced, and changes the sprite.
+		 var bounce = 0;
+		 //Tells the 'draw_firemen' function if a falling person has just fallen to their gruesome death, and changes the sprite while
+		 //the firemen contemplate their morale well-being.
+		 var dropped = 0;
+		 //Tells the 'draw_firemen' function how many seconds the 'dropped' sprite has been displayed for.
+		 var dropdelay = 0;
+
+		 //When the next level is reached, this triggers the words 'Next level!' to appear on screen.
+		 var levelevent = 0;
+		 //Puts a slight delay on the 'Next level!' text so it doesn't disappear instantly
+		 var leveldelay = 0;
+
+		 //Allows the 'draw_fire' method to change sprites
+		 var firenum = 0;
+
+		 //Creates a new array of falling people objects.
+		 var farray = new Array();
+		 //Creates a new array of intervals for each falling object, this prevents the falling people from having the same momentum.
+		 var fallint = new Array();
+		 //Sort of like a boolean checker. Tells the game which falling person has spawned.
+		 var active = new Array();
+
+		 //Current level
+		 var level = 1;
+		 //Current score
+		 var score = 0;
+		 //Number of lives
+		 var lives = 5;
+
+		 //Tells the menu which page to load
+		 var scorepage = 0;
+		 //Contains the local storage high score
+		 var hscore;
+
+		 //Sound files for various events
+		 var die = new Audio('die.wav');
+		 var bleep = new Audio('bleep.wav');
+		 var scores = new Audio('score.wav');
+		 var levelup = new Audio('levelup.wav');
+		 var level12 = new Audio('level12.mp3');
+
+		 //Canvas/context setup
+		 var mycanv=document.getElementById("canvas");
+		 var ctx=mycanv.getContext("2d");
+		 var mycanv2=document.getElementById("canvas2");
+		 var ctx2=mycanv2.getContext("2d");
+
+		 //Initialises all the falling people objects a random sprite
+		 for (i = 0; i < 14; i++){
+		 	var r = getRandomInt(1,100);
+		 	var p = getRandomInt(1,150);
+		 	if(r>=1 && r<=30){
+		 		farray[i] = new fallman("fallman1.png");
+		 	}
+		 	if(r>=31 && r<=60){
+		 		farray[i] = new fallman("fallman2.png");
+		 	}
+		 	if(r>=61 && r<=90){
+		 		farray[i] = new fallman("fallman3.png");
+		 	}
+		 	if(r>=91 && r<=95){
+		 		farray[i] = new fallman("fallman4.png");
+		 	}
+		 	if(r>=96){
+		 		farray[i] = new fallman("fallman5.png");
+		 	}
+		 	farray[i].y = p;
+		 }
+
+		 //Allows the canvas to read the mouse movement
+		 mycanv2.addEventListener("mousemove",seenmotion,false);
+		 //Allows the user to control the firemen with keyboard controls
+		 window.addEventListener('keydown',this.check,false);
+
+		 /**
+		 * @desc when the left and right arrow keys are pressed, move the firemen by 5 pixels
+		 */
+		 function check(e) {
+		 	if(e.keyCode==37){
+		 		firemen_x = firemen_x-5;
+		 	} 
+		 	if(e.keyCode==39){
+		 		firemen_x = firemen_x+5;	 			
+		 	} 		 	
+		 }
+
+		 /**
+		 * @desc creates the motion in the game, adjusting the mouse pointer locations and the firemen positions
+		 * depending on the location of the mouse
+		 */
+		 function seenmotion(e){
+		 	var bounding_box=mycanv2.getBoundingClientRect();
+		 	firemen_x=(e.clientX-bounding_box.left) *
+		 	(mycanv2.width/bounding_box.width);	
+		 	pointer_x=(e.clientX-bounding_box.left) *
+		 	(mycanv2.width/bounding_box.width);	
+		 	pointer_y=(e.clientY-bounding_box.top) *
+		 	(mycanv2.width/bounding_box.height);	
+		 }
+
+
+		 /**
+		 * @desc initiates the menu interval
+		 */
+		 function setup(){
+		 	menu = setInterval(load_menu, 50);
+		 }
+
+		 /**
+		 * @desc initiates the game interval, needs to call 'reset_game()' in case a previous game was already played
+		 */
+		 function start_game(){
+		 	reset_game();
+		 	inter = setInterval(bg_loop, 50);
+		 }
+
+		 /**
+		 * @desc initiates the game over screen
+		 */
+		 function end_game(){
+		 	over = setInterval(game_over, 50);
+		 }
+
+		 /**
+		 * @desc The repeating menu interval function, draws the specified layout using bordered rectangles, text and backgrounds along with the
+		 * mute button state. Had to specify the volume here as I encountered a bug where if the mute button was unmuted in game the volume 
+		 * would be too loud. It also changes the text to red if the mouse pointer hovers over the menu options.
+		 */
+		 function load_menu(){
+		 	mycanv2.addEventListener("click",clicked,true);
+		 	hscore = localStorage.getItem("hscore");
+		 	level12.volume = 0.2;
+		 	level12.loop = true;
+		 	level12.play();
+		 	draw_mute();
+		 	var menu_img=new Image();
+		 	menu_img.src="menu.png";
+		 	ctx.drawImage(menu_img,0,0);
+		 	if(scorepage==0){
+		 		ctx2.fillStyle="#1C1C1C";
+		 		ctx2.fillRect(20,10,760,50);
+		 		ctx2.strokeStyle="yellow";
+		 		ctx2.strokeRect(20,10,760,50);
+
+		 		ctx2.font = "40px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("SAVE THE DUDES", 220, 50);
+
+		 		ctx2.fillStyle="#1C1C1C";
+		 		ctx2.fillRect(30,80,560,360);
+		 		ctx2.strokeStyle="yellow";
+		 		ctx2.strokeRect(30,80,560,360);
+
+		 		if(pointer_y > 130 && pointer_y < 200 && pointer_x > 60 && pointer_x < 60 + 150){
+		 			ctx2.font = "30px Georgia";
+		 			ctx2.fillStyle = 'red';
+		 			ctx2.fillText("Start game", 60, 140);
+		 		} else {
+		 			ctx2.font = "30px Georgia";
+		 			ctx2.fillStyle = 'yellow';
+		 			ctx2.fillText("Start game", 60, 140);
+		 		}
+
+		 		if(pointer_y > 210 && pointer_y < 260 && pointer_x > 60 && pointer_x < 60 + 150){		 	
+		 			ctx2.font = "30px Georgia";
+		 			ctx2.fillStyle = 'red';
+		 			ctx2.fillText("High Score", 60, 200);
+		 		} else {
+		 			ctx2.font = "30px Georgia";
+		 			ctx2.fillStyle = 'yellow';
+		 			ctx2.fillText("High Score ", 60, 200);
+		 		}
+
+		 		ctx2.font = "20px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("How to play:", 60, 300);
+
+		 		ctx2.font = "15px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("* Use the emergency trampoline to escort the falling evacuees to the ambulence", 60, 320);
+
+		 		ctx2.font = "15px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("* More people begin to fall as you progress through levels", 60, 340);
+
+		 		ctx2.font = "15px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("* Don't let people fall!", 60, 360);
+
+		 		ctx2.font = "15px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("* Move the trampoline using the mouse or the left/right arrow keys", 60, 380);
+		 	} else {
+		 		ctx2.fillStyle="#1C1C1C";
+		 		ctx2.fillRect(50,60,360,360);
+		 		ctx2.strokeStyle="yellow";
+		 		ctx2.strokeRect(50,60,360,360);
+
+		 		ctx2.font = "25px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("Current high score is: " + hscore, 80, 200);
+
+		 		if(pointer_y > 500 && pointer_y < 530 && pointer_x > 60 && pointer_x < 60 + 60){
+		 			ctx2.font = "25px Georgia";
+		 			ctx2.fillStyle = 'red';
+		 			ctx2.fillText("Back ", 60, 400);
+		 		} else {
+		 			ctx2.font = "25px Georgia";
+		 			ctx2.fillStyle = 'yellow';
+		 			ctx2.fillText("Back ", 60, 400);
+		 		}
+		 	}
+
+		 	ctx2.font = "25px Georgia";
+		 	ctx2.fillStyle = 'yellow';
+		 	ctx2.fillText("By Alex O'Donnell", 580, 580);
+		 	
+		 }
+
+		 /**
+		 * @desc tells the canvas what to do when the mouse is clicked in certain states. Firstly it checks to see what state it is in, which
+		 * prevents it triggering game_over events on the menu state and vice versa. If the 'Start game' option is played, the canvas' are 
+		 * cleared and the menu state is set to 0. A sound is played and the game interval is started. During the game over state, if the 
+		 * 'play_again' option is selected, the interval is cleared and the game over state is set to 0. The game values are also reset and
+		 * the game begins again. The 'menu' option once again clears the canvas, sets the game over state to 0 and the menu state to 1 and 
+		 * sets up the menu interval again. The mute button is available across all states. 
+		 */
+		 function clicked(mouse_event){
+		 	if(menuactive==1){
+		 		if(pointer_y > 130 && pointer_y < 200 && pointer_x > 60 && pointer_x < 60 + 150){
+		 			ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			clearInterval(menu);
+		 			menuactive=0;
+		 			bleep.play();
+		 			start_game();
+		 		}
+		 		if(pointer_y > 210 && pointer_y < 260 && pointer_x > 60 && pointer_x < 60 + 150){
+		 			bleep.play();
+		 			ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			scorepage = 1;
+		 		}
+		 		if(pointer_y > 500 && pointer_y < 530 && pointer_x > 60 && pointer_x < 60 + 60){
+		 			bleep.play();
+		 			ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			scorepage = 0;
+		 		}
+		 	}
+		 	if(overactive==1){
+		 		if(pointer_y > 500 && pointer_y < 590 && pointer_x > 120 && pointer_x < 130 + 150){
+		 			ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			clearInterval(over);
+		 			overactive=0;
+		 			reset_game();
+		 			bleep.play();
+		 			start_game();
+		 		}
+		 		if(pointer_y > 500 && pointer_y < 590 && pointer_x > 510 && pointer_x < 510 + 150){
+		 			ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 			clearInterval(over);
+		 			overactive=0;
+		 			menuactive=1;
+		 			bleep.play();
+		 			setup();
+		 		}
+		 	}
+		 	if(pointer_y > 750 && pointer_y < 770 && pointer_x > 10 && pointer_x < 10 + 20){
+		 		if(muted==0){
+		 			muted = 1;
+		 			level12.muted = true;
+		 			ctx2.clearRect(10,570,20,20);
+		 		}
+		 		else if (muted==1){
+		 			muted = 0;
+		 			level12.muted = false;
+		 			ctx2.clearRect(10,570,20,20);
+		 		}
+		 	}
+		 }
+
+		 /**
+		 * @desc resets all the in-game values to 0.
+		 */
+		 function reset_game(){
+		 	bounce = 0;
+		 	dropped = 0;
+		 	dropdelay = 0;
+		 	firenum = 0;
+		 	active = new Array();
+		 	level = 1;
+		 	score = 0;
+		 	lives = 5;
+		 }
+
+		 /**
+		 * @desc draws the mute button. The sprite drawn depends on whether the music is muted or not
+		 */
+		 function draw_mute(){
+		 	var mute_img=new Image();
+		 	mute_img.src="mutebtn.png";
+		 	if(muted==0){
+		 		ctx2.drawImage(mute_img, 0, 0, 20, 20, 10, 570, 20, 20);
+		 	} else if(muted==1){
+		 		ctx2.drawImage(mute_img, 20, 0, 20, 20, 10, 570, 20, 20);
+		 	}
+		 }
+
+		 /**
+		 * @desc The main repeating function for the game. Draws everything needed to be displayed on the game as well as updating scores,lives
+		 * and levels. Handles the scrolling sky background, if the level suddenly changes during the interval the level event is triggered.
+		 * Every time this method is called within the interval it compares the level with the current score. If the score is higher than 5, it
+		 * increases the level to 2. At 10 it's increased to 3 and at 25 it's increased to 4. Every level has a limit to the number of falling
+		 * people spawning at once. If the limit has not been reached then it considers spawning a falling person based on a probability.
+		 *
+		 * The main loop in each level goes through the falling object array and checks whether they are actively falling or not. If they are 
+		 * then it starts a separate interval for them. It also checks if the active falling people have fallen below the firemen's position, if
+		 * they do then it clears the image and the interval, resets the objects values, shows the firemen 'dropped' sprite and decrements the 
+		 * number of lives the user has. If the number of lives is less than 0 it triggers the game over state.
+		 */
+		 function bg_loop(){
+		 	draw_sky(sky_x2,-80);
+		 	draw_sky(sky_x,-80);
+		 	draw_bg();
+		 	draw_fire(firenum);
+		 	draw_firemen(firemen_x);
+		 	draw_mute();
+		 	update_score();
+		 	update_level();
+		 	update_lives();
+
+		 	if (sky_x>-800) {
+		 		sky_x--;
+		 	} else {
+		 		sky_x = 799;
+		 	}
+
+		 	if (sky_x2>-800){
+		 		sky_x2--;
+		 	} else {
+		 		sky_x2 = 799;
+		 	}
+
+		 	if(levelevent==1){
+		 		if(leveldelay<=20){
+		 			ctx.font = "40px sans-serif"; 
+		 			ctx.fillStyle = '#DF0101';
+		 			ctx.fillText("Next Level!", 300, 300);
+		 			leveldelay++;
+		 		} else {
+		 			levelevent = 0;
+		 			leveldelay = 0;
+		 		}
+		 	}
+
+		 	if(score>= 5 && score<=9){
+		 		var templev = level;
+		 		level = 2;
+		 		if (templev!=level){
+		 			levelup.play();
+		 			levelevent = 1;
+		 		}
+		 	}
+		 	if(score>= 10 && score<25){
+		 		var templev = level;
+		 		level = 3;
+		 		if (templev!=level){
+		 			levelup.play();
+		 			levelevent = 1;
+		 		}
+		 	}
+		 	if(score>=25){
+		 		var templev = level;
+		 		level = 4;
+		 		if (templev!=level){
+		 			levelup.play();
+		 			levelevent = 1;
+		 		}
+		 	}
+		 	if(level==1){
+		 		for (i = 0; i < 2; i++){
+		 			var r = getRandomInt(1,100);
+		 			if(r < 6){
+		 				if(active[i]==0){
+		 					var jump = new Audio('jump.wav');
+		 					jump.play();
+		 				}
+		 				active[i] = 1;
+		 			}
+		 		}
+
+		 		for (i = 0; i < 2; i++){
+		 			if (active[i]==1){
+		 				if (farray[i].y < 500){
+		 					fallint[i] = setInterval(draw_fall(i),1000);
+		 				} else {
+		 					ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 					clearInterval(fallint[i]);
+		 					active[i]=0;
+		 					farray[i].x = 0;
+		 					farray[i].y = 0;
+		 					farray[i].frotate = 0;
+		 					farray[i].fv = 1;
+		 					dropped = 1;
+		 					die.play();
+		 					lives--;
+		 					if (lives<0){
+		 						clearInterval(inter);
+		 						ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						overactive = 1;
+		 						localStorage.setItem("hscore", score);
+		 						end_game();
+		 					}
+		 				}
+		 			}
+		 		}
+		 	}
+
+		 	if(level==2){
+		 		for (i = 0; i < 4; i++){
+		 			var r = getRandomInt(1,100);
+		 			if(r < 2){
+		 				if(active[i]==0){
+		 					var jump = new Audio('jump.wav');
+		 					jump.play();
+		 				}
+		 				active[i] = 1;
+		 			}
+		 		}
+
+		 		for (i = 0; i < 4; i++){
+		 			if (active[i]==1){
+		 				if (farray[i].y < 500){
+		 					fallint[i] = setInterval(draw_fall(i),1000);
+		 				} else {
+		 					ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 					clearInterval(fallint[i]);
+		 					active[i]=0;
+		 					farray[i].x = 0;
+		 					farray[i].y = 0;
+		 					farray[i].frotate = 0;
+		 					farray[i].fv = 1;
+		 					dropped = 1;
+		 					die.play();
+		 					lives--;
+		 					if (lives<0){
+		 						clearInterval(inter);
+		 						ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						overactive = 1;
+		 						localStorage.setItem("hscore", score);
+		 						end_game();
+		 					}
+		 				}
+		 			}
+		 		}
+		 	}
+
+
+		 	if(level==3){
+		 		for (i = 0; i < 8; i++){
+		 			var r = getRandomInt(1,100);
+		 			if(r < 2){
+		 				if(active[i]==0){
+		 					var jump = new Audio('jump.wav');
+		 					jump.play();
+		 				}
+		 				active[i] = 1;
+		 			}
+		 		}
+
+		 		for (i = 0; i < 8; i++){
+		 			if (active[i]==1){
+		 				if (farray[i].y < 500){
+		 					fallint[i] = setInterval(draw_fall(i),1000);
+		 				} else {
+		 					ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 					clearInterval(fallint[i]);
+		 					active[i]=0;
+		 					farray[i].x = 0;
+		 					farray[i].y = 0;
+		 					farray[i].frotate = 0;
+		 					farray[i].fv = 1;
+		 					dropped = 1;
+		 					die.play();
+		 					lives--;
+		 					if (lives<0){
+		 						clearInterval(inter);
+		 						ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						overactive = 1;
+		 						localStorage.setItem("hscore", score);
+		 						end_game();
+		 					}
+		 				}
+		 			}
+		 		}
+		 	}
+
+
+		 	if(level==4){
+		 		for (i = 0; i < 14; i++){
+		 			var r = getRandomInt(1,100);
+		 			if(r < 2){
+		 				if(active[i]==0){
+		 					var jump = new Audio('jump.wav');
+		 					jump.play();
+		 				}
+		 				active[i] = 1;
+		 			}
+		 		}
+
+		 		for (i = 0; i < 14; i++){
+		 			if (active[i]==1){
+		 				if (farray[i].y < 500){
+		 					fallint[i] = setInterval(draw_fall(i),1000);
+		 				} else {
+		 					ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 					clearInterval(fallint[i]);
+		 					active[i]=0;
+		 					farray[i].x = 0;
+		 					farray[i].y = 0;
+		 					farray[i].frotate = 0;
+		 					farray[i].fv = 1;
+		 					dropped = 1;
+		 					die.play();
+		 					lives--;
+		 					if (lives<0){
+		 						clearInterval(inter);
+		 						ctx.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						ctx2.clearRect(0, 0, mycanv.width, mycanv.height);
+		 						overactive = 1;
+		 						localStorage.setItem("hscore", score);
+		 						end_game();
+		 					}
+		 				}
+		 			}
+		 		}
+		 	}
+		 }
+
+
+		 /**
+		 * @desc the falling person object, contains a sprite for that person, their x/y coordinates, their rotation sprite and their momentum
+		 * @param the random image sprite to load
+		 */
+		 function fallman(i){
+		 	this.img = new Image();
+		 	this.img.src = i;
+		 	this.x =  0;
+		 	this.y =  0;
+		 	this.frotate = 0;
+		 	this.fv = 1;
+		 }
+
+		 /**
+		 * @desc draws the sky background
+		 * @param the position of the sky
+		 */
+		 function draw_sky(x,y){
+		 	var sky_img=new Image();
+		 	sky_img.src="sky1.png";
+		 	ctx.drawImage(sky_img,x,y);
+		 }
+
+		 /**
+		 * @desc draws the background mountains/path/building etc.
+		 */
+		 function draw_bg(){
+		 	var bg_img=new Image();
+		 	bg_img.src="bg.png";
+		 	ctx.drawImage(bg_img,0,0);
+		 }
+
+		 /**
+		 * @desc draws the fire animation using the firenum
+		 * @param firenum variable to return a specific fire sprite
+		 */
+		 function draw_fire(i){
+		 	var fire_img=new Image();
+		 	fire_img.src="fire.png";
+		 	if (i==0){
+		 		ctx.drawImage(fire_img, 0, 0, 187, 120, 75, -16, 190, 120);
+		 		firenum++;
+		 	}
+		 	if (i==1){
+		 		ctx.drawImage(fire_img, 190, 0, 187, 120, 75, -16, 190, 120);
+		 		firenum++;
+		 	}
+		 	if (i==2){
+		 		ctx.drawImage(fire_img, 377, 0, 187, 120, 75, -16, 190, 120);
+		 		firenum++;
+		 	}
+		 	if (i==3){
+		 		ctx.drawImage(fire_img, 565, 0, 187, 120, 75, -16, 190, 120);
+		 		firenum++;
+		 	}
+		 	if (i==4){
+		 		ctx.drawImage(fire_img, 377, 0, 187, 120, 75, -16, 190, 120);
+		 		firenum = 0;
+		 	}
+		 }
+
+		 /**
+		 * @desc draws the firemen at the bottom of the canvas, the 'bounce' and 'dropped' variables trigger the firemen to change sprite 
+		 * depending on what happens in the game.
+		 * @param position x of the firemen
+		 */
+		 function draw_firemen(x){
+
+		 	var fm_img=new Image();
+		 	fm_img.src="firemen.png";
+		 	if(x< 500){
+		 		if(bounce==1){
+		 			ctx.drawImage(fm_img, 134, 0, 134, 55, x, 460, 134, 55);
+		 			bounce = 0;
+		 		} else if(dropped==1){
+		 			ctx.drawImage(fm_img, 268, 0, 134, 55, x, 460, 134, 55);
+		 			dropdelay++;
+		 			if(dropdelay>=20){
+		 				dropped = 0;
+		 				dropdelay = 0;
+		 			}
+		 		}
+		 		else{
+		 			ctx.drawImage(fm_img, 0, 0, 134, 55, x, 460, 134, 55);
+		 		}
+		 	} else{
+		 		ctx.drawImage(fm_img, 0, 0, 134, 55, 499, 460, 134, 55);
+		 	}
+		 }
+
+		 /**
+		 * @desc draws all the falling objects on the screen, the 'if(lives>=0)' prevents the game from drawing falling objects on different 
+		 * states. To begin the method calls clearRect around the position of the falling object in index 'i', it then needs to check if the 
+		 * falling person has fallen into the ambulence, if it has then it increments the score and resets the object. If not, it continues to
+		 * apply the gravity-esque effect while rotating it now and then while checking to see if it collides with the firemen position. If it 
+		 * collides then it applies a bouncing factor of -1.0 to the objects falling velocity (fv) and plays a boing sound.
+		 * @param the index of the arrays
+		 */
+		 function draw_fall(i){
+		 	if(lives>=0){
+		 		ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 		if (farray[i].x > 550 && farray[i].y > 400){
+		 			score = score+1;
+		 			scores.play();
+		 			ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 			clearInterval(fallint[i]);
+		 			active[i]=0;
+		 			farray[i].x = 0;
+		 			farray[i].y = 0;
+		 			farray[i].frotate = 0;
+		 			farray[i].fv = 1;
+		 		} else {
+		 			if (farray[i].y < 520){
+		 				farray[i].frotate++;
+
+		 				farray[i].y += farray[i].fv;
+		 				farray[i].fv += 0.2;
+		 				if (farray[i].x < 620){
+		 					farray[i].x++;
+		 				} else {
+		 					farray[i].x = farray[i].x;
+		 				}			
+		 				if (farray[i].y > 460 && farray[i].x > firemen_x && farray[i].x < firemen_x + 134){
+		 					farray[i].y = farray[i].y-5;
+		 					bounce = 1;
+		 					farray[i].fv *= -1.0;
+		 					var boing = new Audio('boing.wav');
+		 					boing.play();
+		 				}
+
+		 				if(farray[i].frotate>400){
+		 					farray[i].frotate = 0;
+		 				}
+
+		 				if(farray[i].frotate>=0 && farray[i].frotate<=100){
+		 					ctx2.drawImage(farray[i].img, 0, 0, 57, 51, farray[i].x, farray[i].y, 57, 51);
+		 				}
+		 				if(farray[i].frotate>=101 && farray[i].frotate<=200){
+		 					ctx2.drawImage(farray[i].img, 57, 0, 51, 57, farray[i].x, farray[i].y, 51, 57);
+		 				}
+		 				if(farray[i].frotate>=201 && farray[i].frotate<=300){
+		 					ctx2.drawImage(farray[i].img, 111, 0, 57, 51, farray[i].x, farray[i].y, 57, 51);
+		 				}
+		 				if(farray[i].frotate>=301 && farray[i].frotate<=400){
+		 					ctx2.drawImage(farray[i].img, 170, 0, 51, 57, farray[i].x, farray[i].y, 51, 57);
+		 				}
+		 			} else {
+		 				ctx2.clearRect(farray[i].x,farray[i].y,60,60);
+		 				clearInterval(fallint[i]);
+		 				active[i]=0;
+		 				farray[i].x = 0;
+		 				farray[i].y = 0;
+		 				farray[i].frotate = 0;
+		 				farray[i].fv = 1;
+		 				dropped = 1;
+		 			}	
+		 		}
+		 	}
+		 }
+
+		 /**
+		 * @desc Updates the score
+		 */
+		 function update_score(){
+		 	ctx.font = "30px Georgia"; 
+		 	ctx.fillStyle = 'yellow';
+		 	ctx.fillText("Score: " + score, 670, 50);
+		 }
+
+		 /**
+		 * @desc Updates the level
+		 */
+		 function update_level(){
+		 	ctx.font = "30px sans-serif"; 
+		 	ctx.fillStyle = '#DF0101';
+		 	ctx.fillText("Level " + level, 370, 50);
+		 }
+
+		 /**
+		 * @desc Updates the lives
+		 */
+		 function update_lives(){
+		 	ctx.font = "30px Georgia";
+		 	ctx.fillStyle = 'yellow';
+		 	ctx.fillText("Lives: " + lives, 550, 50);
+		 }
+
+		 /**
+		 * @desc The repeating method within the game over interval. It draws the screen using bordered-rectangles, similar to the menu
+		 * the text changes to red when hovered over.
+		 */
+		 function game_over(){
+		 	ctx2.fillStyle="#1C1C1C";
+		 	ctx2.fillRect(20,40,760,260);
+		 	ctx2.strokeStyle="yellow";
+		 	ctx2.strokeRect(20,40,760,260);
+
+		 	ctx2.font = "100px Georgia";
+		 	ctx2.fillStyle = 'yellow';
+		 	ctx2.fillText("GAME OVER", 100, 140);
+
+		 	ctx2.font = "25px Georgia";
+		 	ctx2.fillStyle = 'yellow';
+		 	ctx2.fillText("You scored " + score + "!", 320, 240);
+
+		 	ctx2.fillStyle="#1C1C1C";
+		 	ctx2.fillRect(120,400,150,80);
+		 	ctx2.strokeStyle="yellow";
+		 	ctx2.strokeRect(120,400,150,80);
+
+		 	if(pointer_y > 500 && pointer_y < 590 && pointer_x > 120 && pointer_x < 130 + 150){
+		 		ctx2.font = "25px Georgia";
+		 		ctx2.fillStyle = 'red';
+		 		ctx2.fillText("Play Again", 130, 440);
+		 	} else {
+		 		ctx2.font = "25px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("Play Again", 130, 440);
+		 	}
+
+		 	ctx2.fillStyle="#1C1C1C";
+		 	ctx2.fillRect(480,400,150,80);
+		 	ctx2.strokeStyle="yellow";
+		 	ctx2.strokeRect(480,400,150,80);
+
+		 	if(pointer_y > 500 && pointer_y < 590 && pointer_x > 510 && pointer_x < 510 + 150){
+		 		ctx2.font = "25px Georgia";
+		 		ctx2.fillStyle = 'red';
+		 		ctx2.fillText("Menu", 520, 440);
+		 	} else {
+		 		ctx2.font = "25px Georgia";
+		 		ctx2.fillStyle = 'yellow';
+		 		ctx2.fillText("Menu", 520, 440);
+		 	}
+		 }
+		 /**
+		 * @desc gets a random number. Used for various functions such as getting a random image, randomly spawning falling objects etc.
+		 * @param min = minimum number in the range. max = maximum number in the range.
+		 */
+		 function getRandomInt(min, max) {
+		 	return Math.round(Math.random() * (max - min)) + min;
+		 }
+		</script>
+	</div>
+</body>
+</html>

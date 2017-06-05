@@ -1,0 +1,99 @@
+body { 
+	background-color:#000000;
+}
+
+body:before {
+	content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+	background-image: url("backgroundweb.png");
+	background-repeat:no-repeat;
+	-webkit-background-size: cover;
+    -moz-background-size: cover;
+    -o-background-size: cover;
+	background-image: cover;
+	background-attachment: fixed;
+	opacity:0.4;
+}
+
+.menu {
+	background-color: #151515;
+	height: 30px;
+	width: 90%;
+	border-style: ridge;
+	border-color: #8A2908;
+	border-width: 5px;
+	margin-left: auto;
+    margin-right: auto;
+    color: #FAE500;
+    text-indent: 20px;
+    font-family: monospace;
+    font-size: 100%;
+}
+
+.about {
+	background-color: #151515;
+	height: 70%;
+	width: 70%;
+	border-style: solid;
+	border-color: yellow;
+	padding: 5%;
+		margin-left: auto;
+    margin-right: auto;
+    color: yellow;
+    font-family: monospace;
+
+
+}
+
+
+ul {
+    list-style-type: none;
+    position:absolute;
+    top: 0px;
+    left:55%;
+    overflow: hidden;
+}
+
+li { float: left;
+	padding: 0px;
+	
+	
+}
+
+a {
+    	display: block;
+    	padding:3px;
+	font-weight: bold;
+	text-align: center;
+	color: #FAE500;
+   	background-color: #151515;
+	text-decoration: none;
+    	text-transform: uppercase;
+	font-family: arial;
+	border-style: solid;
+	border-color: #FAE500;
+	
+}
+
+.game {
+	position: relative;
+	padding-left: 18%;
+	text-align: center;
+	border-color: #8A2908;
+	border-width: 12px;
+}
+
+canvas {
+	position:absolute;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: auto;
+    margin-right: auto;
+    display: block;
+    
+}
